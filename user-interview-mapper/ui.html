@@ -42,7 +42,27 @@
     });
 
     const prompt = `
-    Analyze the following user interview and extract key components and their connections (select ouput language based on interview language):
+    Extract key insights from user interview data using the KA method:
+
+    - For each notable event or observation from the interview:
+      a. Event: Describe the situation, action, motivation, and result in 1-2 sentences.
+      b. Inner Voice: Imagine and write down what the user might be thinking or feeling in that moment, expressed in a brief quote.
+      c. Value: Identify the underlying value or need driving the user's behavior or thoughts.
+    - Create a KA card for each event, including all three elements above.
+    - Group similar KA cards together based on common themes or values.
+    - Draw connections between groups to create a value structure map:
+      - Use arrows to show relationships
+      - Add brief explanatory notes on the connections
+
+    Summarize the key user needs and insights revealed by the value structure map.
+
+    Remember to:
+
+    - Focus on the user's perspective when filling out KA cards
+    - Avoid inserting your own assumptions, especially for the "Inner Voice" section
+    - Keep groupings relatively small to maintain specificity
+    - Be prepared to revise card content during the grouping process if needed
+    - Analyze the following user interview and extract key components and their connections (select ouput language based on interview language):
 
     ${script}
 
