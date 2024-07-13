@@ -42,7 +42,7 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
   const page = figma.currentPage;
 
   // Create components
-  result.components.forEach((component, index) => {
+  for (const component of result.components) {
     const node = figma.createFrame();
     node.resize(200, 100);
     node.name = component.name;
@@ -56,30 +56,31 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
     node.appendChild(text);
 
     // Position the node in a grid layout
+    const index = result.components.indexOf(component);
     const columns = 3;
     node.x = (index % columns) * 250;
     node.y = Math.floor(index / columns) * 150;
 
     nodeMap.set(component.id, node);
     page.appendChild(node);
-  });
+  }
 
   // Create connections between components
-  result.components.forEach(component => {
+  for (const component of result.components) {
     const startNode = nodeMap.get(component.id);
     if (!startNode) {
       console.error(`Start node not found for component ${component.id}`);
-      return;
+      continue;
     }
 
-    component.connections.forEach(connection => {
+    for (const connection of component.connections) {
       const endNode = nodeMap.get(connection.id);
       if (!endNode) {
         console.error(`End node not found for connection ${connection.id}`);
-        return;
+        continue;
       }
 
-      // Create a vector line
+      // Create a vector
       const vector = figma.createVector();
       vector.strokeWeight = 2;
       vector.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
@@ -90,7 +91,7 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
       const endX = endNode.x + endNode.width / 2;
       const endY = endNode.y + endNode.height / 2;
 
-      vector.vectorNetwork = {
+      await vector.setVectorNetworkAsync({
         vertices: [
           { x: startX, y: startY },
           { x: endX, y: endY }
@@ -98,7 +99,7 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
         segments: [
           { start: 0, end: 1 }
         ]
-      };
+      });
 
       // Add a label to the vector
       const label = figma.createText();
@@ -114,8 +115,8 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
       group.name = `Connection: ${component.name} -> ${connection.type}`;
 
       console.log(`Created connection from ${startNode.name} to ${endNode.name}`);
-    });
-  });
+    }
+  }
 
   // Move all connection groups to the back
   const connections = page.findChildren(n => n.type === 'GROUP' && n.name.startsWith('Connection:'));
