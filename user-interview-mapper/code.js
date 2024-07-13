@@ -48,18 +48,23 @@ function renderAnalysisResults(result) {
         });
         // Create connections between components
         result.components.forEach(component => {
+            console.log(`Component.id ${component.id}`);
             const startNode = nodeMap.get(component.id);
             if (!startNode) {
                 console.error(`Start node not found for component ${component.id}`);
                 return;
             }
             component.connections.forEach(connection => {
+                console.log(`Connection.id: ${connection.id}, Type: ${connection.type}`);
                 const endNode = nodeMap.get(connection.id);
                 if (!endNode) {
                     console.error(`End node not found for connection ${connection.id}`);
                     return;
                 }
                 try {
+                    if (typeof figma.createConnector !== 'function') {
+                        throw new Error('createConnector is not available in this version of Figma API');
+                    }
                     const connector = figma.createConnector();
                     connector.strokeWeight = 2;
                     connector.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
