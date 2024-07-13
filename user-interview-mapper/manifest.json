@@ -13,7 +13,8 @@
   "networkAccess": {
     "allowedDomains": [
       "https://esm.run",
-      "https://cdn.jsdelivr.net"
+      "https://cdn.jsdelivr.net",
+      "https://generativelanguage.googleapis.com"
     ]
   }
 }
