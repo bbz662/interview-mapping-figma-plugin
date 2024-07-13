@@ -27,23 +27,30 @@ function renderAnalysisResults(result) {
         yield figma.loadFontAsync({ family: "Inter", style: "Regular" });
         const nodeMap = new Map();
         const page = figma.currentPage;
+        const padding = 20; // Padding around nodes
         // Create components
         for (const component of result.components) {
             const node = figma.createFrame();
-            node.resize(200, 100);
+            node.resize(200 + padding * 2, 100 + padding * 2); // Increase node size to accommodate padding
             node.name = component.name;
             node.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 0.9 } }];
+            const innerFrame = figma.createFrame(); // Create an inner frame for content
+            innerFrame.resize(200, 100);
+            innerFrame.x = padding;
+            innerFrame.y = padding;
+            innerFrame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }]; // White background
+            node.appendChild(innerFrame);
             const text = figma.createText();
             text.characters = component.description;
             text.fontSize = 12;
             text.x = 10;
             text.y = 10;
-            node.appendChild(text);
+            innerFrame.appendChild(text);
             // Position the node in a grid layout
             const index = result.components.indexOf(component);
             const columns = 3;
-            node.x = (index % columns) * 250;
-            node.y = Math.floor(index / columns) * 150;
+            node.x = (index % columns) * (250 + padding * 2);
+            node.y = Math.floor(index / columns) * (150 + padding * 2);
             nodeMap.set(component.id, node);
             page.appendChild(node);
         }
@@ -64,7 +71,7 @@ function renderAnalysisResults(result) {
                 const vector = figma.createVector();
                 vector.strokeWeight = 2;
                 vector.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
-                // Calculate start and end points
+                // Calculate start and end points with padding
                 const startX = startNode.x + startNode.width / 2;
                 const startY = startNode.y + startNode.height / 2;
                 const endX = endNode.x + endNode.width / 2;
