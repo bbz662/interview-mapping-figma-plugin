@@ -4,61 +4,69 @@
   <button type="submit">Analyze</button>
 </form>
 
-<script src="https://cdn.jsdelivr.net/npm/@google/generative-ai@0.1.0/dist/generative-ai.min.js"></script>
+<div id="loading" style="display: none;">Analyzing...</div>
+<div id="error" style="color: red;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@google/generative-ai@0.14.1/dist/index.min.js"></script>
 <script>
   document.getElementById('interviewForm').addEventListener('submit', async function (event) {
     event.preventDefault();
     const apiKey = document.getElementById('apiKey').value;
     const script = document.getElementById('interviewScript').value;
 
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('error').textContent = '';
+
     try {
       const result = await analyzeInterviewWithGemini(apiKey, script);
       parent.postMessage({ pluginMessage: { type: 'analysis-complete', result } }, '*');
     } catch (error) {
-      console.error('Error:', error);
-      // Display error to user
+      document.getElementById('error').textContent = `Error: ${error.message}`;
+      parent.postMessage({ pluginMessage: { type: 'analysis-complete', error: error.message } }, '*');
+    } finally {
+      document.getElementById('loading').style.display = 'none';
     }
   });
 
   async function analyzeInterviewWithGemini(apiKey, script) {
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const genAI = new window.GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
       model: "gemini-1.5-flash",
       generationConfig: { responseMimeType: "application/json" }
     });
 
     const prompt = `
-Analyze the following user interview and extract key components and their connections:
+    Analyze the following user interview and extract key components and their connections:
 
-${script}
+    ${script}
 
-Use the following JSON schema for your response:
-{
-  "type": "object",
-  "properties": {
-    "components": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": { "type": "string" },
-          "name": { "type": "string" },
-          "description": { "type": "string" },
-          "connections": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": { "type": "string" },
-                "type": { "type": "string" }
+    Use the following JSON schema for your response:
+    {
+      "type": "object",
+      "properties": {
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "connections": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "type": { "type": "string" }
+                  }
+                }
               }
             }
           }
         }
       }
-    }
-  }
-}`;
+    }`;
 
     const result = await model.generateContent(prompt);
     const response = result.response;

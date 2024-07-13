@@ -10,11 +10,16 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-figma.showUI(__html__);
+figma.showUI(__html__, { width: 500, height: 500 });
 figma.ui.onmessage = (msg) => __awaiter(void 0, void 0, void 0, function* () {
     if (msg.type === 'analysis-complete') {
-        yield renderAnalysisResults(msg.result);
-        figma.closePlugin();
+        if (msg.result) {
+            yield renderAnalysisResults(msg.result);
+            figma.closePlugin();
+        }
+        else if (msg.error) {
+            figma.notify(`Error: ${msg.error}`, { error: true });
+        }
     }
 });
 function renderAnalysisResults(result) {

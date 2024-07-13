@@ -22,12 +22,16 @@ interface Connection {
   type: string;
 }
 
-figma.showUI(__html__);
+figma.showUI(__html__, { width: 500, height: 500 });
 
-figma.ui.onmessage = async (msg: { type: string; result: AnalysisResult }) => {
+figma.ui.onmessage = async (msg: { type: string; result?: AnalysisResult; error?: string }) => {
   if (msg.type === 'analysis-complete') {
-    await renderAnalysisResults(msg.result);
-    figma.closePlugin();
+    if (msg.result) {
+      await renderAnalysisResults(msg.result);
+      figma.closePlugin();
+    } else if (msg.error) {
+      figma.notify(`Error: ${msg.error}`, { error: true });
+    }
   }
 };
 
