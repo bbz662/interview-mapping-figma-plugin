@@ -39,7 +39,12 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
   // Load a font to use for text
   await figma.loadFontAsync({ family: "Inter", style: "Regular" });
 
-  result.components.forEach(component => {
+  const nodeMap = new Map<string, ComponentNode>();
+  const page = figma.currentPage;
+  const connections: SceneNode[] = [];
+
+  // Create components
+  result.components.forEach((component, index) => {
     const node = figma.createComponent();
     node.resize(200, 100);
     node.name = component.name;
@@ -51,29 +56,65 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
     text.y = 10;
     node.appendChild(text);
 
-    // Position the node
-    node.x = Math.random() * figma.viewport.bounds.width;
-    node.y = Math.random() * figma.viewport.bounds.height;
+    // Position the node in a grid layout
+    const columns = 3;
+    node.x = (index % columns) * 250;
+    node.y = Math.floor(index / columns) * 150;
 
-    // Store the component id in the node's name
-    node.setRelaunchData({ id: component.id });
+    // Store the node reference
+    nodeMap.set(component.id, node);
+
+    page.appendChild(node);
   });
 
   // Create connections between components
   result.components.forEach(component => {
+    const startNode = nodeMap.get(component.id);
+    if (!startNode) return;
+
     component.connections.forEach(connection => {
+      const endNode = nodeMap.get(connection.id);
+      if (!endNode) return;
+
       const line = figma.createLine();
       line.strokeWeight = 2;
       line.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
 
-      const startNode = figma.root.findOne(node => node.getRelaunchData().id === component.id) as ComponentNode;
-      const endNode = figma.root.findOne(node => node.getRelaunchData().id === connection.id) as ComponentNode;
+      // Set line endpoints
+      const startX = startNode.x + startNode.width / 2;
+      const startY = startNode.y + startNode.height / 2;
+      const endX = endNode.x + endNode.width / 2;
+      const endY = endNode.y + endNode.height / 2;
 
-      if (startNode && endNode) {
-        line.x = startNode.x + startNode.width / 2;
-        line.y = startNode.y + startNode.height / 2;
-        line.resize(endNode.x - line.x + endNode.width / 2, endNode.y - line.y + endNode.height / 2);
-      }
+      line.x = startX;
+      line.y = startY;
+      line.resize(endX - startX, endY - startY);
+
+      // Add a label to the line
+      const label = figma.createText();
+      label.characters = connection.type;
+      label.fontSize = 10;
+      label.x = (startX + endX) / 2;
+      label.y = (startY + endY) / 2;
+
+      // Group the line and label
+      const group = figma.group([line, label], page);
+      group.name = `Connection: ${component.name} -> ${connection.type}`;
+
+      // Add to connections array
+      connections.push(group);
     });
   });
+
+  // Reorder elements to ensure connections are behind components
+  const allNodes = page.children;
+  connections.forEach(connection => {
+    const index = allNodes.indexOf(connection);
+    if (index !== -1) {
+      page.insertChild(0, connection);
+    }
+  });
+
+  // Adjust the view to fit all created nodes
+  figma.viewport.scrollAndZoomIntoView(page.children);
 }
