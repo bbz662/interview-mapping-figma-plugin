@@ -36,12 +36,10 @@ figma.ui.onmessage = async (msg: { type: string; result?: AnalysisResult; error?
 };
 
 async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
-  // Load a font to use for text
   await figma.loadFontAsync({ family: "Inter", style: "Regular" });
 
   const nodeMap = new Map<string, ComponentNode>();
   const page = figma.currentPage;
-  const connections: SceneNode[] = [];
 
   // Create components
   result.components.forEach((component, index) => {
@@ -61,9 +59,7 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
     node.x = (index % columns) * 250;
     node.y = Math.floor(index / columns) * 150;
 
-    // Store the node reference
     nodeMap.set(component.id, node);
-
     page.appendChild(node);
   });
 
@@ -76,43 +72,26 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
       const endNode = nodeMap.get(connection.id);
       if (!endNode) return;
 
-      const line = figma.createLine();
-      line.strokeWeight = 2;
-      line.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
+      const connector = figma.createConnector();
+      connector.strokeWeight = 2;
+      connector.connectorStart = { endpointNodeId: startNode.id, magnet: 'AUTO' };
+      connector.connectorEnd = { endpointNodeId: endNode.id, magnet: 'AUTO' };
 
-      // Set line endpoints
-      const startX = startNode.x + startNode.width / 2;
-      const startY = startNode.y + startNode.height / 2;
-      const endX = endNode.x + endNode.width / 2;
-      const endY = endNode.y + endNode.height / 2;
-
-      line.x = startX;
-      line.y = startY;
-      line.resize(endX - startX, endY - startY);
-
-      // Add a label to the line
+      // Add a label to the connector
       const label = figma.createText();
       label.characters = connection.type;
       label.fontSize = 10;
-      label.x = (startX + endX) / 2;
-      label.y = (startY + endY) / 2;
 
-      // Group the line and label
-      const group = figma.group([line, label], page);
+      // Position the label at the midpoint of the connector
+      const midX = (startNode.x + endNode.x) / 2;
+      const midY = (startNode.y + endNode.y) / 2;
+      label.x = midX;
+      label.y = midY;
+
+      // Group the connector and label
+      const group = figma.group([connector, label], page);
       group.name = `Connection: ${component.name} -> ${connection.type}`;
-
-      // Add to connections array
-      connections.push(group);
     });
-  });
-
-  // Reorder elements to ensure connections are behind components
-  const allNodes = page.children;
-  connections.forEach(connection => {
-    const index = allNodes.indexOf(connection);
-    if (index !== -1) {
-      page.insertChild(0, connection);
-    }
   });
 
   // Adjust the view to fit all created nodes
