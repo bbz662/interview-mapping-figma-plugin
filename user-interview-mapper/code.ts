@@ -34,6 +34,7 @@ figma.ui.onmessage = async (msg: { type: string; result?: AnalysisResult; error?
     }
   }
 };
+
 async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
   await figma.loadFontAsync({ family: "Inter", style: "Regular" });
 
@@ -42,7 +43,7 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
 
   // Create components
   result.components.forEach((component, index) => {
-    const node = figma.createFrame();  // Using Frame instead of Component for simplicity
+    const node = figma.createFrame();
     node.resize(200, 100);
     node.name = component.name;
     node.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 0.9 } }];
@@ -88,24 +89,42 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
         connector.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
         connector.connectorStart = { endpointNodeId: startNode.id, magnet: 'AUTO' };
         connector.connectorEnd = { endpointNodeId: endNode.id, magnet: 'AUTO' };
+        connector.connectorLineType = 'ELBOWED';  // or 'STRAIGHT'
 
-        // Add a label to the connector
-        const label = figma.createText();
-        label.characters = connection.type;
-        label.fontSize = 10;
-
-        // Position the label at the midpoint of the connector
-        const midX = (startNode.x + endNode.x) / 2;
-        const midY = (startNode.y + endNode.y) / 2;
-        label.x = midX;
-        label.y = midY;
+        // Set the connector's text
+        connector.text.characters = connection.type;
+        connector.text.fontSize = 10;
 
         page.appendChild(connector);
-        page.appendChild(label);
 
         console.log(`Created connector from ${startNode.name} to ${endNode.name}`);
       } catch (error) {
         console.error('Error creating connector:', error);
+
+        // Fallback to creating a line if connector creation fails
+        const line = figma.createLine();
+        line.strokeWeight = 2;
+        line.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
+
+        const startX = startNode.x + startNode.width / 2;
+        const startY = startNode.y + startNode.height / 2;
+        const endX = endNode.x + endNode.width / 2;
+        const endY = endNode.y + endNode.height / 2;
+
+        line.x = startX;
+        line.y = startY;
+        line.resize(endX - startX, endY - startY);
+
+        const label = figma.createText();
+        label.characters = connection.type;
+        label.fontSize = 10;
+        label.x = (startX + endX) / 2;
+        label.y = (startY + endY) / 2;
+
+        const group = figma.group([line, label], page);
+        group.name = `Connection: ${component.name} -> ${connection.type}`;
+
+        console.log(`Created line from ${startNode.name} to ${endNode.name} (fallback)`);
       }
     });
   });
