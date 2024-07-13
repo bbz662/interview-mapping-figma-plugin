@@ -85,19 +85,28 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
       vector.strokeWeight = 2;
       vector.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
 
-      // Set vector start and end points
+      // Calculate start and end points
       const startX = startNode.x + startNode.width / 2;
       const startY = startNode.y + startNode.height / 2;
       const endX = endNode.x + endNode.width / 2;
       const endY = endNode.y + endNode.height / 2;
 
+      // Calculate midpoint for orthogonal routing
+      const midX = (startX + endX) / 2;
+      const midY = (startY + endY) / 2;
+
+      // Create orthogonal path
       await vector.setVectorNetworkAsync({
         vertices: [
           { x: startX, y: startY },
+          { x: midX, y: startY },
+          { x: midX, y: endY },
           { x: endX, y: endY }
         ],
         segments: [
-          { start: 0, end: 1 }
+          { start: 0, end: 1 },
+          { start: 1, end: 2 },
+          { start: 2, end: 3 }
         ]
       });
 
@@ -107,8 +116,8 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
       label.fontSize = 10;
 
       // Position the label at the midpoint of the vector
-      label.x = (startX + endX) / 2;
-      label.y = (startY + endY) / 2;
+      label.x = midX;
+      label.y = midY;
 
       // Group the vector and label
       const group = figma.group([vector, label], page);
