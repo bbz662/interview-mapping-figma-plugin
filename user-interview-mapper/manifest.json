@@ -12,7 +12,8 @@
   "ui": "ui.html",
   "networkAccess": {
     "allowedDomains": [
-      "https://esm.run"
+      "https://esm.run",
+      "https://cdn.jsdelivr.net"
     ]
   }
 }
