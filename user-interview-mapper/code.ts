@@ -34,18 +34,18 @@ figma.ui.onmessage = async (msg: { type: string; result?: AnalysisResult; error?
     }
   }
 };
-
 async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
   await figma.loadFontAsync({ family: "Inter", style: "Regular" });
 
-  const nodeMap = new Map<string, ComponentNode>();
+  const nodeMap = new Map<string, SceneNode>();
   const page = figma.currentPage;
 
   // Create components
   result.components.forEach((component, index) => {
-    const node = figma.createComponent();
+    const node = figma.createFrame();  // Using Frame instead of Component for simplicity
     node.resize(200, 100);
     node.name = component.name;
+    node.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 0.9 } }];
 
     const text = figma.createText();
     text.characters = component.description;
@@ -66,31 +66,47 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
   // Create connections between components
   result.components.forEach(component => {
     const startNode = nodeMap.get(component.id);
-    if (!startNode) return;
+    if (!startNode) {
+      console.error(`Start node not found for component ${component.id}`);
+      return;
+    }
 
     component.connections.forEach(connection => {
       const endNode = nodeMap.get(connection.id);
-      if (!endNode) return;
+      if (!endNode) {
+        console.error(`End node not found for connection ${connection.id}`);
+        return;
+      }
 
-      const connector = figma.createConnector();
-      connector.strokeWeight = 2;
-      connector.connectorStart = { endpointNodeId: startNode.id, magnet: 'AUTO' };
-      connector.connectorEnd = { endpointNodeId: endNode.id, magnet: 'AUTO' };
+      try {
+        if (typeof figma.createConnector !== 'function') {
+          throw new Error('createConnector is not available in this version of Figma API');
+        }
 
-      // Add a label to the connector
-      const label = figma.createText();
-      label.characters = connection.type;
-      label.fontSize = 10;
+        const connector = figma.createConnector();
+        connector.strokeWeight = 2;
+        connector.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
+        connector.connectorStart = { endpointNodeId: startNode.id, magnet: 'AUTO' };
+        connector.connectorEnd = { endpointNodeId: endNode.id, magnet: 'AUTO' };
 
-      // Position the label at the midpoint of the connector
-      const midX = (startNode.x + endNode.x) / 2;
-      const midY = (startNode.y + endNode.y) / 2;
-      label.x = midX;
-      label.y = midY;
+        // Add a label to the connector
+        const label = figma.createText();
+        label.characters = connection.type;
+        label.fontSize = 10;
 
-      // Group the connector and label
-      const group = figma.group([connector, label], page);
-      group.name = `Connection: ${component.name} -> ${connection.type}`;
+        // Position the label at the midpoint of the connector
+        const midX = (startNode.x + endNode.x) / 2;
+        const midY = (startNode.y + endNode.y) / 2;
+        label.x = midX;
+        label.y = midY;
+
+        page.appendChild(connector);
+        page.appendChild(label);
+
+        console.log(`Created connector from ${startNode.name} to ${endNode.name}`);
+      } catch (error) {
+        console.error('Error creating connector:', error);
+      }
     });
   });
 
