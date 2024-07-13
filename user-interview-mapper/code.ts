@@ -45,15 +45,15 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
   // Create components
   for (const component of result.components) {
     const node = figma.createFrame();
-    node.resize(200 + padding * 2, 100 + padding * 2); // Increase node size to accommodate padding
+    node.resize(200 + padding * 2, 100 + padding * 2);
     node.name = component.name;
     node.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 0.9 } }];
 
-    const innerFrame = figma.createFrame(); // Create an inner frame for content
+    const innerFrame = figma.createFrame();
     innerFrame.resize(200, 100);
     innerFrame.x = padding;
     innerFrame.y = padding;
-    innerFrame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }]; // White background
+    innerFrame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
     node.appendChild(innerFrame);
 
     const text = figma.createText();
@@ -93,13 +93,27 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
       vector.strokeWeight = 2;
       vector.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
 
-      // Calculate start and end points with padding
-      const startX = startNode.x + startNode.width / 2;
-      const startY = startNode.y + startNode.height / 2;
-      const endX = endNode.x + endNode.width / 2;
-      const endY = endNode.y + endNode.height / 2;
+      // Determine start and end positions based on relative node positions
+      const startCenter = { x: startNode.x + startNode.width / 2, y: startNode.y + startNode.height / 2 };
+      const endCenter = { x: endNode.x + endNode.width / 2, y: endNode.y + endNode.height / 2 };
 
-      // Calculate midpoint for orthogonal routing
+      let startX, startY, endX, endY;
+
+      if (Math.abs(startCenter.x - endCenter.x) > Math.abs(startCenter.y - endCenter.y)) {
+        // Horizontal connection
+        startX = startCenter.x < endCenter.x ? startNode.x + startNode.width : startNode.x;
+        startY = startCenter.y;
+        endX = startCenter.x < endCenter.x ? endNode.x : endNode.x + endNode.width;
+        endY = endCenter.y;
+      } else {
+        // Vertical connection
+        startX = startCenter.x;
+        startY = startCenter.y < endCenter.y ? startNode.y + startNode.height : startNode.y;
+        endX = endCenter.x;
+        endY = startCenter.y < endCenter.y ? endNode.y : endNode.y + endNode.height;
+      }
+
+      // Calculate midpoints for orthogonal routing
       const midX = (startX + endX) / 2;
       const midY = (startY + endY) / 2;
 
@@ -124,8 +138,8 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
       label.fontSize = 10;
 
       // Position the label at the midpoint of the vector
-      label.x = midX;
-      label.y = midY;
+      label.x = midX - label.width / 2;
+      label.y = midY - label.height / 2;
 
       // Group the vector and label
       const group = figma.group([vector, label], page);
