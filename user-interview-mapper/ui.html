@@ -6,9 +6,15 @@
 
 <div id="loading" style="display: none;">Analyzing...</div>
 <div id="error" style="color: red;"></div>
-
-<script src="https://cdn.jsdelivr.net/npm/@google/generative-ai@0.14.1/dist/index.min.js"></script>
-<script>
+<script type="importmap">
+  {
+    "imports": {
+      "@google/generative-ai": "https://esm.run/@google/generative-ai"
+    }
+  }
+</script>
+<script type="module">
+  import { GoogleGenerativeAI } from "@google/generative-ai";
   document.getElementById('interviewForm').addEventListener('submit', async function (event) {
     event.preventDefault();
     const apiKey = document.getElementById('apiKey').value;
@@ -29,7 +35,7 @@
   });
 
   async function analyzeInterviewWithGemini(apiKey, script) {
-    const genAI = new window.GoogleGenerativeAI(apiKey);
+    const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
       model: "gemini-1.5-flash",
       generationConfig: { responseMimeType: "application/json" }
