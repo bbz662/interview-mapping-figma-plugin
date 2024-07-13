@@ -6,29 +6,70 @@
 // You can access browser APIs in the <script> tag inside "ui.html" which has a
 // full browser environment (See https://www.figma.com/plugin-docs/how-plugins-run).
 
-// This shows the HTML page in "ui.html".
+interface AnalysisResult {
+  components: Component[];
+}
+
+interface Component {
+  id: string;
+  name: string;
+  description: string;
+  connections: Connection[];
+}
+
+interface Connection {
+  id: string;
+  type: string;
+}
+
 figma.showUI(__html__);
 
-// Calls to "parent.postMessage" from within the HTML page will trigger this
-// callback. The callback will be passed the "pluginMessage" property of the
-// posted message.
-figma.ui.onmessage =  (msg: {type: string, count: number}) => {
-  // One way of distinguishing between different types of messages sent from
-  // your HTML page is to use an object with a "type" property like this.
-  if (msg.type === 'create-rectangles') {
-    const nodes: SceneNode[] = [];
-    for (let i = 0; i < msg.count; i++) {
-      const rect = figma.createRectangle();
-      rect.x = i * 150;
-      rect.fills = [{type: 'SOLID', color: {r: 1, g: 0.5, b: 0}}];
-      figma.currentPage.appendChild(rect);
-      nodes.push(rect);
-    }
-    figma.currentPage.selection = nodes;
-    figma.viewport.scrollAndZoomIntoView(nodes);
+figma.ui.onmessage = async (msg: { type: string; result: AnalysisResult }) => {
+  if (msg.type === 'analysis-complete') {
+    await renderAnalysisResults(msg.result);
+    figma.closePlugin();
   }
-
-  // Make sure to close the plugin when you're done. Otherwise the plugin will
-  // keep running, which shows the cancel button at the bottom of the screen.
-  figma.closePlugin();
 };
+
+async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
+  // Load a font to use for text
+  await figma.loadFontAsync({ family: "Inter", style: "Regular" });
+
+  result.components.forEach(component => {
+    const node = figma.createComponent();
+    node.resize(200, 100);
+    node.name = component.name;
+
+    const text = figma.createText();
+    text.characters = component.description;
+    text.fontSize = 12;
+    text.x = 10;
+    text.y = 10;
+    node.appendChild(text);
+
+    // Position the node
+    node.x = Math.random() * figma.viewport.bounds.width;
+    node.y = Math.random() * figma.viewport.bounds.height;
+
+    // Store the component id in the node's name
+    node.setRelaunchData({ id: component.id });
+  });
+
+  // Create connections between components
+  result.components.forEach(component => {
+    component.connections.forEach(connection => {
+      const line = figma.createLine();
+      line.strokeWeight = 2;
+      line.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
+
+      const startNode = figma.root.findOne(node => node.getRelaunchData().id === component.id) as ComponentNode;
+      const endNode = figma.root.findOne(node => node.getRelaunchData().id === connection.id) as ComponentNode;
+
+      if (startNode && endNode) {
+        line.x = startNode.x + startNode.width / 2;
+        line.y = startNode.y + startNode.height / 2;
+        line.resize(endNode.x - line.x + endNode.width / 2, endNode.y - line.y + endNode.height / 2);
+      }
+    });
+  });
+}
