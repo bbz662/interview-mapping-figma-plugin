@@ -79,37 +79,41 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
         return;
       }
 
-      // Create a line
-      const line = figma.createLine();
-      line.strokeWeight = 2;
-      line.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
+      // Create a vector line
+      const vector = figma.createVector();
+      vector.strokeWeight = 2;
+      vector.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
 
-      // Set line start and end points
+      // Set vector start and end points
       const startX = startNode.x + startNode.width / 2;
       const startY = startNode.y + startNode.height / 2;
       const endX = endNode.x + endNode.width / 2;
       const endY = endNode.y + endNode.height / 2;
 
-      line.x = startX;
-      line.y = startY;
-      const width = Math.max(0.01, endX - startX);
-      const height = Math.max(0.01, endY - startY);
-      line.resize(width, height);
+      vector.vectorNetwork = {
+        vertices: [
+          { x: startX, y: startY },
+          { x: endX, y: endY }
+        ],
+        segments: [
+          { start: 0, end: 1 }
+        ]
+      };
 
-      // Add a label to the line
+      // Add a label to the vector
       const label = figma.createText();
       label.characters = connection.type;
       label.fontSize = 10;
 
-      // Position the label at the midpoint of the line
+      // Position the label at the midpoint of the vector
       label.x = (startX + endX) / 2;
       label.y = (startY + endY) / 2;
 
-      // Group the line and label
-      const group = figma.group([line, label], page);
+      // Group the vector and label
+      const group = figma.group([vector, label], page);
       group.name = `Connection: ${component.name} -> ${connection.type}`;
 
-      console.log(`Created line from ${startNode.name} to ${endNode.name}`);
+      console.log(`Created connection from ${startNode.name} to ${endNode.name}`);
     });
   });
 
