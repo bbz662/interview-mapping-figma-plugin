@@ -38,24 +38,52 @@ function renderAnalysisResults(result) {
     return __awaiter(this, void 0, void 0, function* () {
         const frame = figma.createFrame();
         frame.name = 'KA Analysis';
-        frame.resize(2000, 1600); // Increased size to accommodate more content
-        yield renderClusters(result.kaAnalysis.clusters, result.kaAnalysis.kaCards, frame);
-        yield renderConnections(result.kaAnalysis.connections, frame);
+        frame.resize(2000, 1600);
+        const clusterPositions = calculateClusterPositions(result.kaAnalysis.clusters, result.kaAnalysis.connections);
+        yield renderClusters(result.kaAnalysis.clusters, result.kaAnalysis.kaCards, frame, clusterPositions);
+        yield renderRelationshipLabels(result.kaAnalysis.connections, frame, clusterPositions);
     });
 }
-function renderClusters(clusters, kaCards, parent) {
+function calculateClusterPositions(clusters, connections) {
+    const positions = new Map();
+    const clusterSize = 400;
+    const padding = 100;
+    // Initialize positions in a grid
+    clusters.forEach((cluster, index) => {
+        positions.set(cluster.id, {
+            x: (index % 3) * (clusterSize + padding),
+            y: Math.floor(index / 3) * (clusterSize + padding)
+        });
+    });
+    // Adjust positions based on connections
+    connections.forEach(connection => {
+        const fromPos = positions.get(connection.from);
+        const toPos = positions.get(connection.to);
+        if (fromPos && toPos) {
+            // Move connected clusters closer together
+            const midX = (fromPos.x + toPos.x) / 2;
+            const midY = (fromPos.y + toPos.y) / 2;
+            const strength = connection.type === 'strong' ? 0.3 : 0.1;
+            fromPos.x += (midX - fromPos.x) * strength;
+            fromPos.y += (midY - fromPos.y) * strength;
+            toPos.x += (midX - toPos.x) * strength;
+            toPos.y += (midY - toPos.y) * strength;
+        }
+    });
+    return positions;
+}
+function renderClusters(clusters, kaCards, parent, positions) {
     return __awaiter(this, void 0, void 0, function* () {
         const clusterSize = 400;
-        const padding = 40;
-        for (let i = 0; i < clusters.length; i++) {
-            const cluster = clusters[i];
-            const x = (i % 3) * (clusterSize + padding);
-            const y = Math.floor(i / 3) * (clusterSize + padding);
+        for (const cluster of clusters) {
+            const position = positions.get(cluster.id);
+            if (!position)
+                continue;
             const clusterNode = figma.createFrame();
             clusterNode.name = cluster.name;
             clusterNode.resize(clusterSize, clusterSize);
-            clusterNode.x = x;
-            clusterNode.y = y;
+            clusterNode.x = position.x;
+            clusterNode.y = position.y;
             clusterNode.cornerRadius = 8;
             clusterNode.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 1 } }];
             const titleText = figma.createText();
@@ -67,10 +95,41 @@ function renderClusters(clusters, kaCards, parent) {
             titleText.y = 10;
             titleText.textAutoResize = 'WIDTH_AND_HEIGHT';
             clusterNode.appendChild(titleText);
-            // Render KA cards for this cluster (using Array.prototype.some for ES6 compatibility)
             const clusterCards = kaCards.filter(card => cluster.kaCards.some(kaCardId => kaCardId === card.id));
             yield renderKACards(clusterCards, clusterNode);
             parent.appendChild(clusterNode);
+        }
+    });
+}
+function renderRelationshipLabels(connections, parent, positions) {
+    return __awaiter(this, void 0, void 0, function* () {
+        yield figma.loadFontAsync({ family: "Inter", style: "Regular" });
+        for (const connection of connections) {
+            const fromPos = positions.get(connection.from);
+            const toPos = positions.get(connection.to);
+            if (fromPos && toPos) {
+                const midX = (fromPos.x + toPos.x) / 2;
+                const midY = (fromPos.y + toPos.y) / 2;
+                const labelText = figma.createText();
+                labelText.characters = connection.type;
+                labelText.fontSize = 12;
+                labelText.textAlignHorizontal = 'CENTER';
+                labelText.textAlignVertical = 'CENTER';
+                labelText.resize(100, 20);
+                labelText.x = midX - 50;
+                labelText.y = midY - 10;
+                // Create a background for the label
+                const labelBackground = figma.createRectangle();
+                labelBackground.resize(labelText.width + 10, labelText.height + 6);
+                labelBackground.x = labelText.x - 5;
+                labelBackground.y = labelText.y - 3;
+                labelBackground.cornerRadius = 4;
+                labelBackground.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+                // Group the label and its background
+                const labelGroup = figma.group([labelBackground, labelText], parent);
+                labelGroup.name = `Relationship: ${connection.from} - ${connection.to}`;
+                parent.appendChild(labelGroup);
+            }
         }
     });
 }
@@ -108,24 +167,6 @@ function renderKACards(cards, parent) {
             cardNode.appendChild(eventText);
             cardNode.appendChild(valueText);
             parent.appendChild(cardNode);
-        }
-    });
-}
-function renderConnections(connections, parent) {
-    return __awaiter(this, void 0, void 0, function* () {
-        for (const connection of connections) {
-            const fromNode = parent.findChild(n => n.name === connection.from);
-            const toNode = parent.findChild(n => n.name === connection.to);
-            if (fromNode && toNode) {
-                const line = figma.createLine();
-                line.x = fromNode.x + fromNode.width / 2;
-                line.y = fromNode.y + fromNode.height / 2;
-                line.strokeWeight = connection.type === 'strong' ? 2 : 1;
-                line.strokeCap = 'ROUND';
-                line.strokeJoin = 'ROUND';
-                line.resize(toNode.x + toNode.width / 2 - line.x, toNode.y + toNode.height / 2 - line.y);
-                parent.appendChild(line);
-            }
         }
     });
 }
