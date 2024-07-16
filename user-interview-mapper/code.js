@@ -1,4 +1,5 @@
 "use strict";
+// code.ts
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -8,8 +9,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-// Main plugin code
-figma.showUI(__html__, { width: 500, height: 500 });
+// Main code
+figma.showUI(__html__);
 figma.ui.onmessage = (msg) => __awaiter(void 0, void 0, void 0, function* () {
     if (msg.type === 'analysis-complete') {
         if (msg.result) {
@@ -19,6 +20,7 @@ figma.ui.onmessage = (msg) => __awaiter(void 0, void 0, void 0, function* () {
             }
             catch (error) {
                 console.error('Error rendering analysis results:', error);
+                figma.notify('An error occurred while rendering the analysis results.', { error: true });
             }
         }
         else if (msg.error) {
@@ -28,169 +30,56 @@ figma.ui.onmessage = (msg) => __awaiter(void 0, void 0, void 0, function* () {
 });
 function renderAnalysisResults(result) {
     return __awaiter(this, void 0, void 0, function* () {
-        yield figma.loadFontAsync({ family: "Inter", style: "Regular" });
-        const nodeMap = new Map();
-        const page = figma.currentPage;
+        const frame = figma.createFrame();
+        frame.name = 'KA Analysis';
+        frame.resize(1000, 800);
+        yield renderClusters(result.kaAnalysis.clusters, frame);
+        yield renderConnections(result.kaAnalysis.connections, frame);
+    });
+}
+function renderClusters(clusters, parent) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const clusterSize = 150;
         const padding = 20;
-        const nodeWidth = 200 + padding * 2;
-        const nodeHeight = 100 + padding * 2;
-        // Process KACards
-        if (result.kaCards && result.kaCards.length > 0) {
-            for (const kaCard of result.kaCards) {
-                const position = {
-                    x: Math.random() * figma.viewport.bounds.width,
-                    y: Math.random() * figma.viewport.bounds.height
-                };
-                nodeMap.set(kaCard.id, { position });
+        for (let i = 0; i < clusters.length; i++) {
+            const cluster = clusters[i];
+            const x = (i % 3) * (clusterSize + padding);
+            const y = Math.floor(i / 3) * (clusterSize + padding);
+            const clusterNode = figma.createFrame();
+            clusterNode.name = cluster.name;
+            clusterNode.resize(clusterSize, clusterSize);
+            clusterNode.x = x;
+            clusterNode.y = y;
+            clusterNode.cornerRadius = 8;
+            clusterNode.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 1 } }];
+            const text = figma.createText();
+            yield figma.loadFontAsync({ family: "Inter", style: "Regular" });
+            text.characters = cluster.name;
+            text.fontSize = 12;
+            text.x = 10;
+            text.y = 10;
+            text.textAutoResize = 'HEIGHT';
+            text.resize(clusterSize - 20, 20);
+            clusterNode.appendChild(text);
+            parent.appendChild(clusterNode);
+        }
+    });
+}
+function renderConnections(connections, parent) {
+    return __awaiter(this, void 0, void 0, function* () {
+        for (const connection of connections) {
+            const fromNode = parent.findChild(n => n.name === connection.from);
+            const toNode = parent.findChild(n => n.name === connection.to);
+            if (fromNode && toNode) {
+                const line = figma.createLine();
+                line.x = fromNode.x + fromNode.width / 2;
+                line.y = fromNode.y + fromNode.height / 2;
+                line.strokeWeight = connection.type === 'strong' ? 2 : 1;
+                line.strokeCap = 'ROUND';
+                line.strokeJoin = 'ROUND';
+                line.resize(toNode.x + toNode.width / 2 - line.x, toNode.y + toNode.height / 2 - line.y);
+                parent.appendChild(line);
             }
         }
-        // Process Clusters
-        if (result.clusters && result.clusters.length > 0) {
-            for (const cluster of result.clusters) {
-                const position = {
-                    x: Math.random() * figma.viewport.bounds.width,
-                    y: Math.random() * figma.viewport.bounds.height
-                };
-                nodeMap.set(cluster.id, { position });
-            }
-        }
-        // Apply force-directed layout
-        const iterations = 50;
-        const k = 300; // Spring constant
-        for (let i = 0; i < iterations; i++) {
-            for (const nodeInfo of nodeMap.values()) {
-                let fx = 0, fy = 0;
-                // Repulsive force from other nodes
-                for (const otherNodeInfo of nodeMap.values()) {
-                    if (otherNodeInfo !== nodeInfo) {
-                        const dx = nodeInfo.position.x - otherNodeInfo.position.x;
-                        const dy = nodeInfo.position.y - otherNodeInfo.position.y;
-                        const distance = Math.sqrt(dx * dx + dy * dy);
-                        if (distance > 0) {
-                            const force = k * k / distance;
-                            fx += force * dx / distance;
-                            fy += force * dy / distance;
-                        }
-                    }
-                }
-                // Update position
-                nodeInfo.position.x += fx * 0.1;
-                nodeInfo.position.y += fy * 0.1;
-            }
-        }
-        // Create nodes for KACards
-        if (result.kaCards && result.kaCards.length > 0) {
-            for (const kaCard of result.kaCards) {
-                const nodeInfo = nodeMap.get(kaCard.id);
-                if (!nodeInfo)
-                    continue;
-                const node = figma.createFrame();
-                node.resize(nodeWidth, nodeHeight);
-                node.name = `KACard: ${kaCard.event}`;
-                node.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 1 } }];
-                const innerFrame = figma.createFrame();
-                innerFrame.resize(200, 100);
-                innerFrame.x = padding;
-                innerFrame.y = padding;
-                innerFrame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
-                node.appendChild(innerFrame);
-                const text = figma.createText();
-                text.characters = `Event: ${kaCard.event}\nInner Voice: ${kaCard.innerVoice}\nValue: ${kaCard.value}`;
-                text.fontSize = 10;
-                text.x = 10;
-                text.y = 10;
-                innerFrame.appendChild(text);
-                node.x = nodeInfo.position.x;
-                node.y = nodeInfo.position.y;
-                nodeInfo.node = node;
-                page.appendChild(node);
-            }
-        }
-        // Create nodes for clusters
-        if (result.clusters && result.clusters.length > 0) {
-            for (const cluster of result.clusters) {
-                const nodeInfo = nodeMap.get(cluster.id);
-                if (!nodeInfo)
-                    continue;
-                const node = figma.createFrame();
-                node.resize(nodeWidth, nodeHeight);
-                node.name = cluster.name;
-                node.fills = [{ type: 'SOLID', color: { r: 0.9, g: 1, b: 0.9 } }];
-                const innerFrame = figma.createFrame();
-                innerFrame.resize(200, 100);
-                innerFrame.x = padding;
-                innerFrame.y = padding;
-                innerFrame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
-                node.appendChild(innerFrame);
-                const text = figma.createText();
-                text.characters = `${cluster.name}\n${cluster.representingValue}\nKACards: ${cluster.kaCards.length}`;
-                text.fontSize = 12;
-                text.x = 10;
-                text.y = 10;
-                innerFrame.appendChild(text);
-                node.x = nodeInfo.position.x;
-                node.y = nodeInfo.position.y;
-                nodeInfo.node = node;
-                page.appendChild(node);
-            }
-        }
-        // Create connections
-        if (result.connections && result.connections.length > 0) {
-            for (const connection of result.connections) {
-                const startNodeInfo = nodeMap.get(connection.from);
-                const endNodeInfo = nodeMap.get(connection.to);
-                if (!(startNodeInfo === null || startNodeInfo === void 0 ? void 0 : startNodeInfo.node) || !(endNodeInfo === null || endNodeInfo === void 0 ? void 0 : endNodeInfo.node))
-                    continue;
-                const vector = figma.createVector();
-                vector.strokeWeight = 2;
-                vector.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
-                const startNode = startNodeInfo.node;
-                const endNode = endNodeInfo.node;
-                const startCenter = { x: startNode.x + startNode.width / 2, y: startNode.y + startNode.height / 2 };
-                const endCenter = { x: endNode.x + endNode.width / 2, y: endNode.y + endNode.height / 2 };
-                let startX, startY, endX, endY;
-                if (Math.abs(startCenter.x - endCenter.x) > Math.abs(startCenter.y - endCenter.y)) {
-                    startX = startCenter.x < endCenter.x ? startNode.x + startNode.width : startNode.x;
-                    startY = startCenter.y;
-                    endX = startCenter.x < endCenter.x ? endNode.x : endNode.x + endNode.width;
-                    endY = endCenter.y;
-                }
-                else {
-                    startX = startCenter.x;
-                    startY = startCenter.y < endCenter.y ? startNode.y + startNode.height : startNode.y;
-                    endX = endCenter.x;
-                    endY = startCenter.y < endCenter.y ? endNode.y : endNode.y + endNode.height;
-                }
-                const midX = (startX + endX) / 2;
-                const midY = (startY + endY) / 2;
-                yield vector.setVectorNetworkAsync({
-                    vertices: [
-                        { x: startX, y: startY },
-                        { x: midX, y: startY },
-                        { x: midX, y: endY },
-                        { x: endX, y: endY }
-                    ],
-                    segments: [
-                        { start: 0, end: 1 },
-                        { start: 1, end: 2 },
-                        { start: 2, end: 3 }
-                    ]
-                });
-                const label = figma.createText();
-                label.characters = `${connection.type}\n${connection.description || ''}`;
-                label.fontSize = 10;
-                label.x = midX - label.width / 2;
-                label.y = midY - label.height / 2;
-                const group = figma.group([vector, label], page);
-                group.name = `Connection: ${connection.from} -> ${connection.to}`;
-            }
-        }
-        // Move all connection groups to the back
-        const connections = page.findChildren(n => n.type === 'GROUP' && n.name.startsWith('Connection:'));
-        connections.forEach(connection => {
-            page.insertChild(0, connection);
-        });
-        // Adjust the view to fit all created nodes
-        figma.viewport.scrollAndZoomIntoView(page.children);
     });
 }
