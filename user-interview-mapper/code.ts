@@ -93,38 +93,6 @@ function calculateClusterSizes(clusters: Cluster[], kaCards: KACard[]): Map<stri
   return sizes;
 }
 
-async function renderClusters(clusters: Cluster[], kaCards: KACard[], parent: FrameNode, positions: Map<string, { x: number, y: number }>, sizes: Map<string, { width: number, height: number }>) {
-  for (const cluster of clusters) {
-    const position = positions.get(cluster.id);
-    const size = sizes.get(cluster.id);
-    if (!position || !size) continue;
-
-    const clusterNode = figma.createFrame();
-    clusterNode.name = cluster.name;
-    clusterNode.resize(size.width, size.height);
-    clusterNode.x = position.x;
-    clusterNode.y = position.y;
-    clusterNode.cornerRadius = 8;
-    clusterNode.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 1 } }];
-
-    const titleText = figma.createText();
-    await figma.loadFontAsync({ family: "Inter", style: "Bold" });
-    titleText.fontName = { family: "Inter", style: "Bold" };
-    titleText.characters = cluster.name;
-    titleText.fontSize = 16;
-    titleText.x = 10;
-    titleText.y = 10;
-    titleText.textAutoResize = 'WIDTH_AND_HEIGHT';
-
-    clusterNode.appendChild(titleText);
-
-    const clusterCards = kaCards.filter(card => cluster.kaCards.indexOf(card.id) !== -1);
-    await renderKACards(clusterCards, clusterNode);
-
-    parent.appendChild(clusterNode);
-  }
-}
-
 function calculateClusterPositions(clusters: Cluster[], connections: Connection[], sizes: Map<string, { width: number, height: number }>): Map<string, { x: number, y: number }> {
   const positions = new Map<string, { x: number, y: number }>();
   const padding = 100;
@@ -217,44 +185,107 @@ async function renderRelationshipLabels(connections: Connection[], parent: Frame
   }
 }
 
-// Keep the renderKACards function as it was before, but make sure it's using the correct positioning
-async function renderKACards(cards: KACard[], parent: FrameNode) {
-  const cardWidth = 180;
-  const cardHeight = 100;
-  const cardPadding = 10;
+async function renderClusters(clusters: Cluster[], kaCards: KACard[], parent: FrameNode, positions: Map<string, { x: number, y: number }>, sizes: Map<string, { width: number, height: number }>) {
+  const clusterPadding = 20;
+  const cardSpacing = 10;
+
+  for (const cluster of clusters) {
+    const position = positions.get(cluster.id);
+    const size = sizes.get(cluster.id);
+    if (!position || !size) continue;
+
+    const clusterNode = figma.createFrame();
+    clusterNode.name = cluster.name;
+    clusterNode.resize(size.width, size.height);
+    clusterNode.x = position.x;
+    clusterNode.y = position.y;
+    clusterNode.cornerRadius = 8;
+    clusterNode.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 1 } }];
+
+    // Cluster title
+    const titleBackground = figma.createRectangle();
+    titleBackground.resize(size.width, 40);
+    titleBackground.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 0.8 } }];
+    clusterNode.appendChild(titleBackground);
+
+    const titleText = figma.createText();
+    await figma.loadFontAsync({ family: "Inter", style: "Bold" });
+    titleText.fontName = { family: "Inter", style: "Bold" };
+    titleText.characters = cluster.name;
+    titleText.fontSize = 16;
+    titleText.x = clusterPadding;
+    titleText.y = 10;
+    titleText.textAutoResize = 'WIDTH_AND_HEIGHT';
+    clusterNode.appendChild(titleText);
+
+    // Render KA cards
+    const clusterCards = kaCards.filter(card => cluster.kaCards.indexOf(card.id) !== -1);
+    let currentY = 50; // Start below the title
+    for (const card of clusterCards) {
+      const cardNode = await renderKACard(card);
+      cardNode.x = clusterPadding;
+      cardNode.y = currentY;
+      clusterNode.appendChild(cardNode);
+      currentY += cardNode.height + cardSpacing;
+    }
+
+    parent.appendChild(clusterNode);
+  }
+}
+
+async function renderKACard(card: KACard): Promise<FrameNode> {
+  const cardWidth = 360;
+  const cardHeight = 120;
+
+  const cardNode = figma.createFrame();
+  cardNode.name = `KA Card ${card.id}`;
+  cardNode.resize(cardWidth, cardHeight);
+  cardNode.cornerRadius = 4;
+  cardNode.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
 
   await figma.loadFontAsync({ family: "Inter", style: "Regular" });
+  await figma.loadFontAsync({ family: "Inter", style: "Bold" });
 
-  cards.forEach((card, index) => {
-    const x = cardPadding + (index % 2) * (cardWidth + cardPadding);
-    const y = 40 + Math.floor(index / 2) * (cardHeight + cardPadding);
+  // Event
+  const eventLabel = createLabel("出来事", 10, 10);
+  const eventText = createContent(card.event, 10, 25, cardWidth - 20, 30, "Bold");
 
-    const cardNode = figma.createFrame();
-    cardNode.name = `KA Card ${card.id}`;
-    cardNode.resize(cardWidth, cardHeight);
-    cardNode.x = x;
-    cardNode.y = y;
-    cardNode.cornerRadius = 4;
-    cardNode.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+  // Inner Voice
+  const innerVoiceLabel = createLabel("心の声", 10, 65);
+  const innerVoiceText = createContent(card.innerVoice, 10, 80, (cardWidth / 2) - 15, 30);
 
-    const eventText = figma.createText();
-    eventText.characters = card.event;
-    eventText.fontSize = 12;
-    eventText.x = 5;
-    eventText.y = 5;
-    eventText.textAutoResize = 'HEIGHT';
-    eventText.resize(cardWidth - 10, 20);
+  // Value
+  const valueLabel = createLabel("価値", cardWidth / 2 + 5, 65);
+  const valueText = createContent(card.value, cardWidth / 2 + 5, 80, (cardWidth / 2) - 15, 30);
 
-    const valueText = figma.createText();
-    valueText.characters = card.value;
-    valueText.fontSize = 10;
-    valueText.x = 5;
-    valueText.y = cardHeight - 20;
-    valueText.textAutoResize = 'HEIGHT';
-    valueText.resize(cardWidth - 10, 15);
+  cardNode.appendChild(eventLabel);
+  cardNode.appendChild(eventText);
+  cardNode.appendChild(innerVoiceLabel);
+  cardNode.appendChild(innerVoiceText);
+  cardNode.appendChild(valueLabel);
+  cardNode.appendChild(valueText);
 
-    cardNode.appendChild(eventText);
-    cardNode.appendChild(valueText);
-    parent.appendChild(cardNode);
-  });
+  return cardNode;
+}
+
+function createLabel(text: string, x: number, y: number): TextNode {
+  const label = figma.createText();
+  label.characters = text;
+  label.fontSize = 10;
+  label.fills = [{ type: 'SOLID', color: { r: 0.5, g: 0.5, b: 0.5 } }];
+  label.x = x;
+  label.y = y;
+  return label;
+}
+
+function createContent(text: string, x: number, y: number, width: number, height: number, style: "Regular" | "Bold" = "Regular"): TextNode {
+  const content = figma.createText();
+  content.characters = text;
+  content.fontSize = 12;
+  content.fontName = { family: "Inter", style: style };
+  content.x = x;
+  content.y = y;
+  content.textAutoResize = 'HEIGHT';
+  content.resize(width, height);
+  return content;
 }
