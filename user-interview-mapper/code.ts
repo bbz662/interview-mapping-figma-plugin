@@ -1,30 +1,34 @@
-// This plugin will open a window to prompt the user to enter a number, and
-// it will then create that many rectangles on the screen.
-
 // This file holds the main code for plugins. Code in this file has access to
 // the *figma document* via the figma global object.
 // You can access browser APIs in the <script> tag inside "ui.html" which has a
 // full browser environment (See https://www.figma.com/plugin-docs/how-plugins-run).
 
-interface AnalysisResult {
-  components: Component[];
+interface KACard {
+  id: string;
+  event: string;
+  innerVoice: string;
+  value: string;
 }
 
-interface Component {
+interface Cluster {
   id: string;
   name: string;
-  description: string;
-  connections: Connection[];
+  representingValue: string;
+  kaCards: string[];
 }
 
 interface Connection {
-  id: string;
+  from: string;
+  to: string;
   type: string;
+  description?: string;
+  relatedKACards?: string[];
 }
 
-interface Point {
-  x: number;
-  y: number;
+interface AnalysisResult {
+  kaCards: KACard[];
+  clusters: Cluster[];
+  connections: Connection[];
 }
 
 interface NodeInfo {
@@ -54,22 +58,22 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
   const nodeWidth = 200 + padding * 2;
   const nodeHeight = 100 + padding * 2;
 
-  // Initialize node positions randomly
-  for (const component of result.components) {
+  // Initialize node positions randomly for clusters
+  for (const cluster of result.clusters) {
     const position = {
       x: Math.random() * figma.viewport.bounds.width,
       y: Math.random() * figma.viewport.bounds.height
     };
-    nodeMap.set(component.id, { position });
+    nodeMap.set(cluster.id, { position });
   }
 
   // Apply force-directed layout
   const iterations = 50;
   const k = 300; // Spring constant
   for (let i = 0; i < iterations; i++) {
-    for (const component of result.components) {
-      const nodeInfo = nodeMap.get(component.id);
-      if (!nodeInfo) continue;  // Skip if nodeInfo is undefined
+    for (const cluster of result.clusters) {
+      const nodeInfo = nodeMap.get(cluster.id);
+      if (!nodeInfo) continue;
 
       let fx = 0, fy = 0;
 
@@ -88,14 +92,17 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
       }
 
       // Attractive force from connected nodes
-      for (const connection of component.connections) {
-        const connectedNodeInfo = nodeMap.get(connection.id);
-        if (connectedNodeInfo) {
-          const dx = nodeInfo.position.x - connectedNodeInfo.position.x;
-          const dy = nodeInfo.position.y - connectedNodeInfo.position.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          fx -= k * dx / distance;
-          fy -= k * dy / distance;
+      for (const connection of result.connections) {
+        if (connection.from === cluster.id || connection.to === cluster.id) {
+          const connectedId = connection.from === cluster.id ? connection.to : connection.from;
+          const connectedNodeInfo = nodeMap.get(connectedId);
+          if (connectedNodeInfo) {
+            const dx = nodeInfo.position.x - connectedNodeInfo.position.x;
+            const dy = nodeInfo.position.y - connectedNodeInfo.position.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            fx -= k * dx / distance;
+            fy -= k * dy / distance;
+          }
         }
       }
 
@@ -105,14 +112,14 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
     }
   }
 
-  // Create nodes
-  for (const component of result.components) {
-    const nodeInfo = nodeMap.get(component.id);
-    if (!nodeInfo) continue;  // Skip if nodeInfo is undefined
+  // Create nodes for clusters
+  for (const cluster of result.clusters) {
+    const nodeInfo = nodeMap.get(cluster.id);
+    if (!nodeInfo) continue;
 
     const node = figma.createFrame();
     node.resize(nodeWidth, nodeHeight);
-    node.name = component.name;
+    node.name = cluster.name;
     node.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 0.9 } }];
 
     const innerFrame = figma.createFrame();
@@ -123,7 +130,7 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
     node.appendChild(innerFrame);
 
     const text = figma.createText();
-    text.characters = component.description;
+    text.characters = `${cluster.name}\n${cluster.representingValue}`;
     text.fontSize = 12;
     text.x = 10;
     text.y = 10;
@@ -137,63 +144,59 @@ async function renderAnalysisResults(result: AnalysisResult): Promise<void> {
   }
 
   // Create connections
-  for (const component of result.components) {
-    const startNodeInfo = nodeMap.get(component.id);
-    if (!startNodeInfo || !startNodeInfo.node) continue;
+  for (const connection of result.connections) {
+    const startNodeInfo = nodeMap.get(connection.from);
+    const endNodeInfo = nodeMap.get(connection.to);
+    if (!startNodeInfo || !startNodeInfo.node || !endNodeInfo || !endNodeInfo.node) continue;
 
-    for (const connection of component.connections) {
-      const endNodeInfo = nodeMap.get(connection.id);
-      if (!endNodeInfo || !endNodeInfo.node) continue;
+    const vector = figma.createVector();
+    vector.strokeWeight = 2;
+    vector.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
 
-      const vector = figma.createVector();
-      vector.strokeWeight = 2;
-      vector.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
+    const startNode = startNodeInfo.node;
+    const endNode = endNodeInfo.node;
+    const startCenter = { x: startNode.x + startNode.width / 2, y: startNode.y + startNode.height / 2 };
+    const endCenter = { x: endNode.x + endNode.width / 2, y: endNode.y + endNode.height / 2 };
 
-      const startNode = startNodeInfo.node;
-      const endNode = endNodeInfo.node;
-      const startCenter = { x: startNode.x + startNode.width / 2, y: startNode.y + startNode.height / 2 };
-      const endCenter = { x: endNode.x + endNode.width / 2, y: endNode.y + endNode.height / 2 };
+    let startX, startY, endX, endY;
 
-      let startX, startY, endX, endY;
-
-      if (Math.abs(startCenter.x - endCenter.x) > Math.abs(startCenter.y - endCenter.y)) {
-        startX = startCenter.x < endCenter.x ? startNode.x + startNode.width : startNode.x;
-        startY = startCenter.y;
-        endX = startCenter.x < endCenter.x ? endNode.x : endNode.x + endNode.width;
-        endY = endCenter.y;
-      } else {
-        startX = startCenter.x;
-        startY = startCenter.y < endCenter.y ? startNode.y + startNode.height : startNode.y;
-        endX = endCenter.x;
-        endY = startCenter.y < endCenter.y ? endNode.y : endNode.y + endNode.height;
-      }
-
-      const midX = (startX + endX) / 2;
-      const midY = (startY + endY) / 2;
-
-      await vector.setVectorNetworkAsync({
-        vertices: [
-          { x: startX, y: startY },
-          { x: midX, y: startY },
-          { x: midX, y: endY },
-          { x: endX, y: endY }
-        ],
-        segments: [
-          { start: 0, end: 1 },
-          { start: 1, end: 2 },
-          { start: 2, end: 3 }
-        ]
-      });
-
-      const label = figma.createText();
-      label.characters = connection.type;
-      label.fontSize = 10;
-      label.x = midX - label.width / 2;
-      label.y = midY - label.height / 2;
-
-      const group = figma.group([vector, label], page);
-      group.name = `Connection: ${component.name} -> ${connection.type}`;
+    if (Math.abs(startCenter.x - endCenter.x) > Math.abs(startCenter.y - endCenter.y)) {
+      startX = startCenter.x < endCenter.x ? startNode.x + startNode.width : startNode.x;
+      startY = startCenter.y;
+      endX = startCenter.x < endCenter.x ? endNode.x : endNode.x + endNode.width;
+      endY = endCenter.y;
+    } else {
+      startX = startCenter.x;
+      startY = startCenter.y < endCenter.y ? startNode.y + startNode.height : startNode.y;
+      endX = endCenter.x;
+      endY = startCenter.y < endCenter.y ? endNode.y : endNode.y + endNode.height;
     }
+
+    const midX = (startX + endX) / 2;
+    const midY = (startY + endY) / 2;
+
+    await vector.setVectorNetworkAsync({
+      vertices: [
+        { x: startX, y: startY },
+        { x: midX, y: startY },
+        { x: midX, y: endY },
+        { x: endX, y: endY }
+      ],
+      segments: [
+        { start: 0, end: 1 },
+        { start: 1, end: 2 },
+        { start: 2, end: 3 }
+      ]
+    });
+
+    const label = figma.createText();
+    label.characters = `${connection.type}\n${connection.description || ''}`;
+    label.fontSize = 10;
+    label.x = midX - label.width / 2;
+    label.y = midY - label.height / 2;
+
+    const group = figma.group([vector, label], page);
+    group.name = `Connection: ${connection.from} -> ${connection.to}`;
   }
 
   // Move all connection groups to the back
