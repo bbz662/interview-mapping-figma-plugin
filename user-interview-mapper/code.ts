@@ -59,58 +59,49 @@ figma.ui.onmessage = async (msg: { type: string; result?: AnalysisResult; error?
 };
 
 async function renderAnalysisResults(result: AnalysisResult) {
+  const clusterSizes = calculateClusterSizes(result.kaAnalysis.clusters, result.kaAnalysis.kaCards);
+  const clusterPositions = calculateClusterPositions(result.kaAnalysis.clusters, result.kaAnalysis.connections, clusterSizes);
+  const frameSize = calculateFrameSize(clusterPositions, clusterSizes);
+
   const frame = figma.createFrame();
   frame.name = 'KA Analysis';
-  frame.resize(2000, 1600);
+  frame.resize(frameSize.width, frameSize.height);
 
-  const clusterPositions = calculateClusterPositions(result.kaAnalysis.clusters, result.kaAnalysis.connections);
-  await renderClusters(result.kaAnalysis.clusters, result.kaAnalysis.kaCards, frame, clusterPositions);
-  await renderRelationshipLabels(result.kaAnalysis.connections, frame, clusterPositions);
+  await renderClusters(result.kaAnalysis.clusters, result.kaAnalysis.kaCards, frame, clusterPositions, clusterSizes);
+  await renderRelationshipLabels(result.kaAnalysis.connections, frame, clusterPositions, clusterSizes);
 }
 
-function calculateClusterPositions(clusters: Cluster[], connections: Connection[]): Map<string, { x: number, y: number }> {
-  const positions = new Map<string, { x: number, y: number }>();
-  const clusterSize = 400;
-  const padding = 100;
-  
-  // Initialize positions in a grid
-  clusters.forEach((cluster, index) => {
-    positions.set(cluster.id, {
-      x: (index % 3) * (clusterSize + padding),
-      y: Math.floor(index / 3) * (clusterSize + padding)
-    });
+function calculateClusterSizes(clusters: Cluster[], kaCards: KACard[]): Map<string, { width: number, height: number }> {
+  const sizes = new Map<string, { width: number, height: number }>();
+  const cardWidth = 180;
+  const cardHeight = 100;
+  const cardPadding = 10;
+  const clusterPadding = 40;
+
+  clusters.forEach(cluster => {
+    const clusterCards = kaCards.filter(card => cluster.kaCards.indexOf(card.id) !== -1);
+    const cardsPerRow = 2;
+    const rows = Math.ceil(clusterCards.length / cardsPerRow);
+    const cols = Math.min(clusterCards.length, cardsPerRow);
+
+    const width = cols * cardWidth + (cols + 1) * cardPadding + clusterPadding;
+    const height = rows * cardHeight + (rows + 1) * cardPadding + clusterPadding + 30; // Extra 30 for title
+
+    sizes.set(cluster.id, { width, height });
   });
 
-  // Adjust positions based on connections
-  connections.forEach(connection => {
-    const fromPos = positions.get(connection.from);
-    const toPos = positions.get(connection.to);
-    if (fromPos && toPos) {
-      // Move connected clusters closer together
-      const midX = (fromPos.x + toPos.x) / 2;
-      const midY = (fromPos.y + toPos.y) / 2;
-      const strength = connection.type === 'strong' ? 0.3 : 0.1;
-
-      fromPos.x += (midX - fromPos.x) * strength;
-      fromPos.y += (midY - fromPos.y) * strength;
-      toPos.x += (midX - toPos.x) * strength;
-      toPos.y += (midY - toPos.y) * strength;
-    }
-  });
-
-  return positions;
+  return sizes;
 }
 
-async function renderClusters(clusters: Cluster[], kaCards: KACard[], parent: FrameNode, positions: Map<string, { x: number, y: number }>) {
-  const clusterSize = 400;
-
+async function renderClusters(clusters: Cluster[], kaCards: KACard[], parent: FrameNode, positions: Map<string, { x: number, y: number }>, sizes: Map<string, { width: number, height: number }>) {
   for (const cluster of clusters) {
     const position = positions.get(cluster.id);
-    if (!position) continue;
+    const size = sizes.get(cluster.id);
+    if (!position || !size) continue;
 
     const clusterNode = figma.createFrame();
     clusterNode.name = cluster.name;
-    clusterNode.resize(clusterSize, clusterSize);
+    clusterNode.resize(size.width, size.height);
     clusterNode.x = position.x;
     clusterNode.y = position.y;
     clusterNode.cornerRadius = 8;
@@ -127,24 +118,82 @@ async function renderClusters(clusters: Cluster[], kaCards: KACard[], parent: Fr
 
     clusterNode.appendChild(titleText);
 
-    const clusterCards = kaCards.filter(card => 
-      cluster.kaCards.some(kaCardId => kaCardId === card.id)
-    );
+    const clusterCards = kaCards.filter(card => cluster.kaCards.indexOf(card.id) !== -1);
     await renderKACards(clusterCards, clusterNode);
 
     parent.appendChild(clusterNode);
   }
 }
 
-async function renderRelationshipLabels(connections: Connection[], parent: FrameNode, positions: Map<string, { x: number, y: number }>) {
+function calculateClusterPositions(clusters: Cluster[], connections: Connection[], sizes: Map<string, { width: number, height: number }>): Map<string, { x: number, y: number }> {
+  const positions = new Map<string, { x: number, y: number }>();
+  const padding = 100;
+
+  // Initialize positions in a grid
+  let currentX = padding;
+  let currentY = padding;
+  let maxHeightInRow = 0;
+
+  clusters.forEach((cluster) => {
+    const size = sizes.get(cluster.id);
+    if (!size) return;
+
+    if (currentX + size.width > 2000) {  // Arbitrary max width, adjust as needed
+      currentX = padding;
+      currentY += maxHeightInRow + padding;
+      maxHeightInRow = 0;
+    }
+
+    positions.set(cluster.id, { x: currentX, y: currentY });
+    currentX += size.width + padding;
+    maxHeightInRow = Math.max(maxHeightInRow, size.height);
+  });
+
+  // Adjust positions based on connections
+  connections.forEach(connection => {
+    const fromPos = positions.get(connection.from);
+    const toPos = positions.get(connection.to);
+    if (fromPos && toPos) {
+      const strength = connection.type === 'strong' ? 0.2 : 0.1;
+      const midX = (fromPos.x + toPos.x) / 2;
+      const midY = (fromPos.y + toPos.y) / 2;
+
+      fromPos.x += (midX - fromPos.x) * strength;
+      fromPos.y += (midY - fromPos.y) * strength;
+      toPos.x += (midX - toPos.x) * strength;
+      toPos.y += (midY - toPos.y) * strength;
+    }
+  });
+
+  return positions;
+}
+
+function calculateFrameSize(positions: Map<string, { x: number, y: number }>, sizes: Map<string, { width: number, height: number }>): { width: number, height: number } {
+  let maxX = 0;
+  let maxY = 0;
+
+  positions.forEach((position, clusterId) => {
+    const size = sizes.get(clusterId);
+    if (size) {
+      maxX = Math.max(maxX, position.x + size.width);
+      maxY = Math.max(maxY, position.y + size.height);
+    }
+  });
+
+  return { width: maxX + 100, height: maxY + 100 };  // Add some padding
+}
+
+async function renderRelationshipLabels(connections: Connection[], parent: FrameNode, positions: Map<string, { x: number, y: number }>, sizes: Map<string, { width: number, height: number }>) {
   await figma.loadFontAsync({ family: "Inter", style: "Regular" });
 
   for (const connection of connections) {
     const fromPos = positions.get(connection.from);
     const toPos = positions.get(connection.to);
-    if (fromPos && toPos) {
-      const midX = (fromPos.x + toPos.x) / 2;
-      const midY = (fromPos.y + toPos.y) / 2;
+    const fromSize = sizes.get(connection.from);
+    const toSize = sizes.get(connection.to);
+    if (fromPos && toPos && fromSize && toSize) {
+      const midX = (fromPos.x + fromSize.width / 2 + toPos.x + toSize.width / 2) / 2;
+      const midY = (fromPos.y + fromSize.height / 2 + toPos.y + toSize.height / 2) / 2;
 
       const labelText = figma.createText();
       labelText.characters = connection.type;
@@ -155,7 +204,6 @@ async function renderRelationshipLabels(connections: Connection[], parent: Frame
       labelText.x = midX - 50;
       labelText.y = midY - 10;
 
-      // Create a background for the label
       const labelBackground = figma.createRectangle();
       labelBackground.resize(labelText.width + 10, labelText.height + 6);
       labelBackground.x = labelText.x - 5;
@@ -163,16 +211,13 @@ async function renderRelationshipLabels(connections: Connection[], parent: Frame
       labelBackground.cornerRadius = 4;
       labelBackground.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
 
-      // Group the label and its background
-      const labelGroup = figma.group([labelBackground, labelText], parent);
-      labelGroup.name = `Relationship: ${connection.from} - ${connection.to}`;
-
-      parent.appendChild(labelGroup);
+      parent.appendChild(labelBackground);
+      parent.appendChild(labelText);
     }
   }
 }
 
-
+// Keep the renderKACards function as it was before, but make sure it's using the correct positioning
 async function renderKACards(cards: KACard[], parent: FrameNode) {
   const cardWidth = 180;
   const cardHeight = 100;
@@ -180,10 +225,9 @@ async function renderKACards(cards: KACard[], parent: FrameNode) {
 
   await figma.loadFontAsync({ family: "Inter", style: "Regular" });
 
-  for (let i = 0; i < cards.length; i++) {
-    const card = cards[i];
-    const x = cardPadding + (i % 2) * (cardWidth + cardPadding);
-    const y = 40 + Math.floor(i / 2) * (cardHeight + cardPadding);
+  cards.forEach((card, index) => {
+    const x = cardPadding + (index % 2) * (cardWidth + cardPadding);
+    const y = 40 + Math.floor(index / 2) * (cardHeight + cardPadding);
 
     const cardNode = figma.createFrame();
     cardNode.name = `KA Card ${card.id}`;
@@ -212,5 +256,5 @@ async function renderKACards(cards: KACard[], parent: FrameNode) {
     cardNode.appendChild(eventText);
     cardNode.appendChild(valueText);
     parent.appendChild(cardNode);
-  }
+  });
 }
